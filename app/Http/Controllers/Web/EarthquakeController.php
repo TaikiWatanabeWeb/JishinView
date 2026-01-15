@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Http;
+use Inertia\Inertia;
 
 class EarthquakeController extends Controller
 {
@@ -16,5 +17,11 @@ class EarthquakeController extends Controller
 
         // JSONとして返す
         return $response->json();
+    }
+
+    public function index()
+    {
+        // resources/js/Pages/EarthquakeMap.vue を表示する
+        return Inertia::render('EarthquakeMap');
     }
 }
