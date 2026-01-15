@@ -1,0 +1,10 @@
+/* css/app.css に追加・修正 */
+
+/* 震度ごとの背景色クラス（JSから動的に付与・参照用） */
+.shindo-color-1 { color: #87ceeb; } /* 震度1: スカイブルー（背景が黒なら視認性良） */
+.shindo-color-2 { color: #00ff00; } /* 震度2: 鮮やかな緑 */
+.shindo-color-3 { color: #ffff00; } /* 震度3: 黄色 */
+.shindo-color-4 { color: #ffa500; } /* 震度4: オレンジ */
+.shindo-color-5 { color: #ff0000; } /* 震度5弱/強: 赤 */
+.shindo-color-6 { color: #a52a2a; } /* 震度6弱/強: 茶色/濃い赤 */
+.shindo-color-7 { color: #800080; } /* 震度7: 紫 */
