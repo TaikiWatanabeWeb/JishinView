@@ -6,7 +6,8 @@ const props = defineProps({
     currentIndex: {type: Number, required: true},
     formatScale: {type: Function, required: true},
     getShindoColor: {type: Function, required: true},
-    lastUpdateDisplay: {type: String, default: ""}
+    lastUpdateDisplay: {type: String, default: ""},
+    isEEW: {type: Boolean, default: false}
 });
 
 const emit = defineEmits(['update:currentIndex']);
@@ -257,5 +258,20 @@ const selectHistory = (index) => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.is-eew-alert {
+    background: rgba(180, 0, 0, 0.95) !important;
+    border: 2px solid #ff0000 !important;
+    animation: alert-flash 1s infinite alternate;
+}
+
+@keyframes alert-flash {
+    from {
+        box-shadow: 0 0 10px #ff0000;
+    }
+    to {
+        box-shadow: 0 0 30px #ff0000;
+    }
 }
 </style>

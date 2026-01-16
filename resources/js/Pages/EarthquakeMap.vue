@@ -10,14 +10,15 @@ const currentIndex = ref(0);
 const lastTopId = ref(null);
 const isInitialLoad = ref(true);
 const lastUpdateDisplay = ref("");
-const isLoading = ref(true); // 初期値は true
+const isLoading = ref(true);
+const currentIsEEW = ref(false);
 
 let map = null;
 let geoJsonLayer = null;
 let iconLayerGroup = null;
 let epicenterMarker = null;
+let eewBoundsLayer = null;
 
-// --- 震度変換ヘルパー ---
 const formatScale = (scale) => {
     const s = parseInt(scale);
     if (isNaN(s) || s < 10) return "-";
@@ -33,18 +34,17 @@ const formatScale = (scale) => {
     return "-";
 };
 
-// 【元の色味を完全復元】
 const getShindoColor = (scale) => {
     const s = parseInt(scale);
-    if (s >= 70) return '#c850c8'; // 7
-    if (s >= 60) return '#ff6b6b'; // 6強
-    if (s >= 55) return '#ff8e53'; // 6弱
-    if (s >= 50) return '#ffad5a'; // 5強
-    if (s >= 45) return '#ffcf77'; // 5弱
-    if (s >= 40) return '#fff27d'; // 4
-    if (s >= 30) return '#98ee99'; // 3
-    if (s >= 20) return '#81d4fa'; // 2
-    if (s >= 10) return '#bbdefb'; // 1
+    if (s >= 70) return '#c850c8';
+    if (s >= 60) return '#ff6b6b';
+    if (s >= 55) return '#ff8e53';
+    if (s >= 50) return '#ffad5a';
+    if (s >= 45) return '#ffcf77';
+    if (s >= 40) return '#fff27d';
+    if (s >= 30) return '#98ee99';
+    if (s >= 20) return '#81d4fa';
+    if (s >= 10) return '#bbdefb';
     return 'transparent';
 };
 
@@ -81,17 +81,51 @@ const fetchHistory = async () => {
     }
 };
 
+const handleEEW = (data) => {
+    if (!map) return;
+    if (eewBoundsLayer) map.removeLayer(eewBoundsLayer);
+
+    const hypo = data.earthquake?.hypocenter || {};
+    if (hypo.area) {
+        const bounds = [
+            [hypo.area.s, hypo.area.w],
+            [hypo.area.n, hypo.area.e]
+        ];
+
+        eewBoundsLayer = L.rectangle(bounds, {
+            className: 'eew-rect-animated',
+            color: "#ff0000",
+            weight: 5,
+            fillColor: "#ff0000",
+            fillOpacity: 0.3,
+            dashArray: '12, 12',
+            interactive: false
+        }).addTo(map);
+
+        map.fitBounds(bounds, {padding: [100, 100], animate: true, duration: 1.5});
+    }
+};
+
 const connectWS = () => {
     const socket = new WebSocket('wss://api.p2pquake.net/v2/ws');
-
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if ([551, 552, 554, 561].includes(data.code)) fetchHistory();
+        if (data.code === 554) {
+            currentIsEEW.value = true;
+            handleEEW(data);
+        }
+        if ([551, 552, 561].includes(data.code)) {
+            currentIsEEW.value = false;
+            if (eewBoundsLayer) {
+                map.removeLayer(eewBoundsLayer);
+                eewBoundsLayer = null;
+            }
+            fetchHistory();
+        }
     };
     socket.onclose = () => setTimeout(connectWS, 5000);
 };
 
-// --- 地図描画（塗りつぶしロジック復元） ---
 const updateMapDisplay = (shouldFly = false) => {
     if (!map || !geoJsonLayer || earthquakes.value.length === 0) return;
     const target = earthquakes.value[currentIndex.value];
@@ -101,13 +135,11 @@ const updateMapDisplay = (shouldFly = false) => {
     const eqInfo = target.earthquake || {};
     const hypo = eqInfo.hypocenter || {};
 
-    // 1. 震度データと揺れた都道府県のリストを再構築
     const cityShindoMap = {};
     const shakingPrefs = new Set();
     points.forEach(p => {
         if (p.pref) shakingPrefs.add(p.pref);
         cityShindoMap[p.pref + p.addr] = p.scale;
-        cityShindoMap[p.addr] = p.scale;
     });
 
     iconLayerGroup.clearLayers();
@@ -116,18 +148,15 @@ const updateMapDisplay = (shouldFly = false) => {
     geoJsonLayer.eachLayer(layer => {
         const props = layer.feature.properties;
         const pref = props.N03_001 || "";
-        const city = props.N03_004 || "";
-        const ward = props.N03_005 || "";
-        const cityName = city + ward;
+        const cityName = (props.N03_004 || "") + (props.N03_005 || "");
         const fullName = pref + cityName;
 
         let scale = 0;
-        // 2. 判定ロジック：都道府県が一致する場合のみ詳細チェック
         if (shakingPrefs.has(pref)) {
-            scale = cityShindoMap[fullName] || cityShindoMap[cityName] || 0;
+            scale = cityShindoMap[fullName] || 0;
             if (scale === 0) {
-                for (let [addr, s] of Object.entries(cityShindoMap)) {
-                    if (cityName && addr.includes(cityName) && addr.includes(pref)) {
+                for (let [key, s] of Object.entries(cityShindoMap)) {
+                    if (key.startsWith(pref) && key.includes(cityName)) {
                         scale = s;
                         break;
                     }
@@ -135,7 +164,6 @@ const updateMapDisplay = (shouldFly = false) => {
             }
         }
 
-        // 3. スタイル適用（塗りつぶしを有効化）
         layer.setStyle({
             fillColor: scale > 0 ? getShindoColor(scale) : 'transparent',
             fillOpacity: scale > 0 ? 0.6 : 0,
@@ -143,22 +171,18 @@ const updateMapDisplay = (shouldFly = false) => {
             weight: scale > 0 ? 1.5 : 0.3
         });
 
-        // 4. 地図上の震度アイコン表示
         if (scale > 0 && !placedCities.has(fullName)) {
-            try {
-                const center = layer.getBounds().getCenter();
-                L.marker(center, {
-                    icon: L.divIcon({
-                        className: 'shindo-icon-container',
-                        html: `<div class="shindo-icon-inner" style="background-color: ${getShindoColor(scale)};">${formatScale(scale)}</div>`,
-                        iconSize: [24, 24],
-                        iconAnchor: [12, 12]
-                    }),
-                    interactive: false
-                }).addTo(iconLayerGroup);
-                placedCities.add(fullName);
-            } catch (e) {
-            }
+            const center = layer.getBounds().getCenter();
+            L.marker(center, {
+                icon: L.divIcon({
+                    className: 'shindo-icon-container',
+                    html: `<div class="shindo-icon-inner" style="background-color: ${getShindoColor(scale)};">${formatScale(scale)}</div>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                }),
+                interactive: false
+            }).addTo(iconLayerGroup);
+            placedCities.add(fullName);
         }
     });
 
@@ -168,11 +192,19 @@ const updateMapDisplay = (shouldFly = false) => {
             icon: L.divIcon({className: 'epicenter-mark', html: '×', iconSize: [40, 40], iconAnchor: [20, 20]})
         }).addTo(map);
 
+        // --- 地震の規模に応じた動的なズーム機能の復元 ---
         if (isInitialLoad.value || shouldFly) {
             let dynamicZoom = 8;
-            const maxS = parseInt(target.earthquake.maxScale);
-            if (maxS >= 50) dynamicZoom = 7;
-            else if (maxS < 30) dynamicZoom = 10;
+            const maxS = parseInt(eqInfo.maxScale);
+
+            if (maxS >= 50) {
+                dynamicZoom = 7; // 震度5強以上は揺れが広いため広域
+            } else if (maxS >= 40) {
+                dynamicZoom = 8; // 震度4前後
+            } else if (maxS < 30) {
+                dynamicZoom = 10; // 震度2以下などは局所的なためズーム
+            }
+
             map.flyTo([hypo.latitude, hypo.longitude], dynamicZoom, {animate: true, duration: 1.5});
             isInitialLoad.value = false;
         }
@@ -194,9 +226,16 @@ onMounted(async () => {
         const geoRes = await fetch('/data/japan.json');
         const geoData = await geoRes.json();
         geoJsonLayer = markRaw(L.geoJson(geoData, {
-            style: {fillColor: 'transparent', weight: 0.3, color: '#555', fillOpacity: 0.05},
+            style: {
+                fillColor: 'transparent',
+                weight: 0.3,
+                color: '#555',
+                fillOpacity: 0.05
+            },
             onEachFeature: (feature, layer) => {
-                const cityName = (feature.properties.N03_004 || "") + (feature.properties.N03_005 || "");
+                const props = feature.properties;
+                const cityName = (props.N03_004 || "") + (props.N03_005 || "");
+
                 if (cityName) {
                     layer.bindTooltip(cityName, {
                         sticky: true,
@@ -205,13 +244,42 @@ onMounted(async () => {
                         className: 'city-tooltip'
                     });
                 }
+
+                layer.on({
+                    mouseover: (e) => {
+                        const l = e.target;
+                        // 現在のスタイル（震度色など）を一時保存
+                        l._originalStyle = {
+                            weight: l.options.weight,
+                            color: l.options.color,
+                            fillOpacity: l.options.fillOpacity,
+                            fillColor: l.options.fillColor
+                        };
+
+                        // ホバー時の強調スタイルを適用
+                        l.setStyle({
+                            weight: 3,           // 輪郭を太く
+                            color: '#00c3ff',    // 鮮やかな水色
+                            fillOpacity: 0.4     // 少し濃くして「選択感」を出す
+                        });
+
+                        if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                            l.bringToFront();
+                        }
+                    },
+                    mouseout: (e) => {
+                        const l = e.target;
+                        // 保存しておいた元のスタイルに戻す
+                        if (l._originalStyle) {
+                            l.setStyle(l._originalStyle);
+                        }
+                    }
+                });
             }
         }).addTo(map));
 
         await fetchHistory();
-
         isLoading.value = false;
-
         connectWS();
         setInterval(updateClock, 1000);
         updateClock();
@@ -235,13 +303,17 @@ onMounted(async () => {
         </Transition>
 
         <div id="map"></div>
+
         <EarthquakePanel
+            v-if="!isLoading && earthquakes.length > 0"
             :earthquakes="earthquakes"
             v-model:currentIndex="currentIndex"
             :formatScale="formatScale"
             :getShindoColor="getShindoColor"
-            :last-update-display="lastUpdateDisplay"
+            :lastUpdateDisplay="lastUpdateDisplay"
+            :isEEW="currentIsEEW"
         />
+
         <div id="legend">
             <div v-for="s in [70, 60, 55, 50, 45, 40, 30, 20, 10]" :key="s" class="legend-item">
                 <span :style="{ background: getShindoColor(s) }"></span>震度 {{ formatScale(s) }}
@@ -251,41 +323,84 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* スタイルは変更なし（前回提供いただいたものに準拠） */
+.monitor-root {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    background: #1a1c1e;
+    overflow: hidden;
+}
+
 #map {
     height: 100vh;
     width: 100%;
     background: #1a1c1e;
 }
 
-:deep(.shindo-icon-container) {
-    background: transparent !important;
-    border: none !important;
+:deep(.eew-rect-animated) {
+    animation: eew-dash-rotate 2s linear infinite, eew-fade-pulse 1.5s ease-in-out infinite alternate;
 }
 
-:deep(.shindo-icon-inner) {
-    width: 24px;
-    height: 24px;
+@keyframes eew-dash-rotate {
+    from {
+        stroke-dashoffset: 24;
+    }
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes eew-fade-pulse {
+    from {
+        opacity: 0.4;
+        stroke-width: 4;
+    }
+    to {
+        opacity: 1;
+        stroke-width: 7;
+    }
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #1a1c1e;
     display: flex;
-    align-items: center;
     justify-content: center;
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    border-radius: 4px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-    color: #ffffff !important;
-    font-weight: 900;
-    font-size: 14px;
-    line-height: 1;
-    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 0px 0 #000, -1px 0px 0 #000, 0px 1px 0 #000, 0px -1px 0 #000;
+    align-items: center;
+    z-index: 9999;
 }
 
-:deep(.epicenter-mark) {
-    color: #ff0000 !important;
-    font-size: 40px !important;
-    font-weight: bold !important;
-    text-shadow: 0 0 5px #fff, 0 0 10px #fff;
-    line-height: 40px;
+.loading-content {
     text-align: center;
+    color: #00c3ff;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 3px solid rgba(0, 195, 255, 0.1);
+    border-top-color: #00c3ff;
+    border-radius: 50%;
+    animation: spin 1s infinite;
+    margin: 0 auto 15px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.fade-leave-active {
+    transition: opacity 0.8s ease;
+}
+
+.fade-leave-to {
+    opacity: 0;
 }
 
 #legend {
@@ -312,5 +427,38 @@ onMounted(async () => {
     margin-right: 10px;
     border-radius: 2px;
     border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+:deep(.shindo-icon-inner) {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    color: #ffffff !important;
+    font-weight: 900;
+    font-size: 14px;
+    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
+:deep(.epicenter-mark) {
+    color: #ff0000 !important;
+    font-size: 80px !important;
+    text-shadow: 0 0 5px #fff, 0 0 10px #fff;
+    line-height: 40px;
+    text-align: center;
+    font-weight: lighter;
+}
+
+:deep(.city-tooltip) {
+    background-color: #fff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #000 !important;
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
 }
 </style>
