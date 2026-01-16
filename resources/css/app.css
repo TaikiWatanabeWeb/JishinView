@@ -33,15 +33,15 @@ path.leaflet-interactive {
 
 /* --- 震度情報パネル (#side-panel) --- */
 #side-panel {
-    position: absolute;
+    position: static;
     top: 20px;
     left: 20px;
-    width: 320px;         /* 初期幅 */
+    width: 340px; /* 初期幅 */
     min-width: 280px;     /* 最小幅 */
     max-width: 600px;     /* 最大幅 */
     background: rgba(30, 35, 45, 0.95);
     color: white;
-    padding: 15px;
+    padding: 0 !important;
     border-radius: 8px;
     z-index: 1000;
     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
@@ -56,12 +56,95 @@ path.leaflet-interactive {
     flex-direction: column;
 }
 
-.panel-header {
-    background: #2c3e50;
-    padding: 10px 15px;
+.panel-container {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.system-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 3px 12px;
+    border-radius: 4px;
+    color: #fff;
+    font-family: monospace; /* 数字を綺麗に見せる */
+    font-size: 0.85rem;
+}
+
+.live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #ff4d4d;
     font-weight: bold;
-    font-size: 0.9rem;
-    border-bottom: 2px solid #34495e;
+}
+
+.live-dot {
+    width: 6px;
+    height: 6px;
+    background: #ff4d4d;
+    border-radius: 50%;
+    /* 録画中のような点滅アニメーション */
+    animation: blink 1.2s infinite;
+}
+
+@keyframes blink {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.update-time-text {
+    color: #ccc;
+    letter-spacing: 0.05em;
+}
+
+.panel-header {
+    margin: 0;
+    padding: 12px 15px; /* ヘッダー内の余白 */
+    background: #2c3e50; /* app.cssの設定 */
+    border-radius: 8px 8px 0 0; /* 上部の角を丸める */
+    width: 100%;
+}
+
+/* ヘッダー以外のコンテンツに余白を戻す */
+.shindo-box, #history-list, .history-label {
+    margin-left: 15px;
+    margin-right: 15px;
+}
+
+.shindo-box {
+    margin-top: 15px; /* 上部との間隔 */
+}
+
+/* --- 市区町村名ツールチップのデザイン --- */
+:deep(.city-tooltip) {
+    background-color: rgba(30, 35, 45, 0.9) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+    font-size: 12px !important;
+    font-weight: bold !important;
+    border-radius: 4px !important;
+    padding: 4px 8px !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ツールチップの矢印を消す */
+:deep(.leaflet-tooltip-top:before) {
+    border-top-color: transparent !important;
 }
 
 #info-content {

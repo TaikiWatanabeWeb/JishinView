@@ -1,13 +1,15 @@
 <script setup>
-import {ref, onMounted, nextTick, watch, markRaw} from 'vue';
+import {markRaw, nextTick, onMounted, ref, watch} from 'vue';
 import {Head} from '@inertiajs/vue3';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import EarthquakePanel from "@/Components/EarthquakePanel.vue";
 
 const earthquakes = ref([]);
 const currentIndex = ref(0);
 const lastTopId = ref(null);
 const isInitialLoad = ref(true);
+const lastUpdateDisplay = ref(""); // 表示用の文字列
 
 let map = null;
 let geoJsonLayer = null;
@@ -129,7 +131,29 @@ const updateMapDisplay = (shouldFly = false) => {
         }).addTo(map);
 
         if (isInitialLoad.value || shouldFly) {
-            map.flyTo([hypo.latitude, hypo.longitude], 8, {animate: true, duration: 1.5});
+            // 1. ズームレベルを計算するロジック
+            // 基本は 8。震度が 30(震度3) 未満ならズームを 9 に、50(震度5弱) 以上なら広域を見せるために 7 にする
+            let dynamicZoom = 8;
+            const scale = parseInt(target.earthquake.maxScale);
+
+            if (scale >= 50) {
+                dynamicZoom = 7; // 広域表示
+            } else if (scale < 30) {
+                dynamicZoom = 10 // より詳細にズーム
+            }
+
+            // 2. マグニチュードが非常に大きい場合（M7以上など）の考慮も加える場合
+            const mag = parseFloat(hypo.magnitude);
+            if (mag >= 7.0) {
+                dynamicZoom = 6; // 超巨大地震は日本全体が見えるくらい引く
+            }
+
+            // 計算したズームレベルで移動
+            map.flyTo([hypo.latitude, hypo.longitude], dynamicZoom, {
+                animate: true,
+                duration: 1.5
+            });
+
             isInitialLoad.value = false;
         }
     }
@@ -169,6 +193,16 @@ const fetchHistory = async () => {
                 nextTick(() => updateMapDisplay(isNewArrival));
             }
         }
+
+        const now = new Date();
+        const h = String(now.getHours()).padStart(2, '0');
+        const m = String(now.getMinutes()).padStart(2, '0');
+        const s = String(now.getSeconds()).padStart(2, '0');
+        const y = now.getFullYear();
+        const mon = now.getMonth() + 1;
+        const d = now.getDate();
+
+        lastUpdateDisplay.value = `${y}年${mon}月${d}日 ${h}時${m}分${s}秒更新`;
     } catch (e) {
         console.error("Fetch error:", e);
     }
@@ -255,7 +289,11 @@ onMounted(async () => {
 
     // 初回実行
     await fetchHistory();
-    setInterval(fetchHistory, 1000);
+    setInterval(() => {
+        fetchHistory();
+        const now = new Date();
+        secondsSinceUpdate.value = Math.floor((now - lastUpdateTime.value) / 1000);
+    }, 1000);
 });
 </script>
 
@@ -263,34 +301,13 @@ onMounted(async () => {
     <Head title="Earthquake Monitor"/>
     <div class="monitor-root">
         <div id="map"></div>
-        <div v-if="earthquakes.length > 0" id="side-panel">
-            <div class="panel-header">各地の震度情報</div>
-            <div class="shindo-box">
-                <div class="shindo-value"
-                     :style="{ color: getShindoColor(earthquakes[currentIndex].earthquake.maxScale) }">
-                    {{ formatScale(earthquakes[currentIndex].earthquake.maxScale) }}
-                </div>
-                <div class="area-info">
-                    <div class="area-name">{{ earthquakes[currentIndex].earthquake.hypocenter.name || "調査中" }}</div>
-                    <div class="info-text">{{ earthquakes[currentIndex].earthquake.time }}</div>
-                    <div class="info-text">M{{ earthquakes[currentIndex].earthquake.hypocenter.magnitude || '-' }} / 深さ
-                        {{ earthquakes[currentIndex].earthquake.hypocenter.depth || '-' }}km
-                    </div>
-                </div>
-            </div>
-            <div id="history-list">
-                <div class="history-label">地震履歴</div>
-                <div v-for="(eq, i) in earthquakes.slice(0, 15)" :key="eq.id" class="history-item"
-                     :class="{ 'active-eq': currentIndex === i }" @click="currentIndex = i">
-                    <span class="h-scale" :style="{ background: getShindoColor(eq.earthquake.maxScale) }">{{
-                            formatScale(eq.earthquake.maxScale)
-                        }}</span>
-                    <span class="h-time">{{ eq.earthquake.time.split(' ')[1].substring(0, 5) }}</span>
-                    <span class="h-name">{{ eq.earthquake.hypocenter.name }}</span>
-                    <span class="h-m">M{{ eq.earthquake.hypocenter.magnitude }}</span>
-                </div>
-            </div>
-        </div>
+        <EarthquakePanel
+            :earthquakes="earthquakes"
+            v-model:currentIndex="currentIndex"
+            :formatScale="formatScale"
+            :getShindoColor="getShindoColor"
+            :last-update-display="lastUpdateDisplay"
+        />
         <div id="legend">
             <div v-for="s in [70, 60, 55, 50, 45, 40, 30, 20, 10]" :key="s" class="legend-item">
                 <span :style="{ background: getShindoColor(s) }"></span>震度 {{ formatScale(s) }}
