@@ -170,8 +170,8 @@ const updateMapDisplay = (shouldFly = false) => {
         layer.setStyle({
             fillColor: scale > 0 ? getShindoColor(scale) : 'transparent',
             fillOpacity: scale > 0 ? 0.6 : 0,
-            color: scale > 0 ? '#ffffff' : '#999', // 境界線を少し明るく
-            weight: scale > 0 ? 1.5 : 0.5 // 通常時の線を少し太く
+            color: scale > 0 ? '#ffffff' : '#777575', // 境界線を薄いグレーに
+            weight: scale > 0 ? 1.5 : 0.3 // 通常時の線を細く
         });
 
         if (scale > 0 && !placedCities.has(fullName)) {
@@ -229,11 +229,11 @@ onMounted(async () => {
         center: [36.5, 137.0], zoom: 5, minZoom: 5, maxBounds: bounds, maxBoundsViscosity: 1.0, zoomControl: false
     }));
 
-    // ライトテーマ用の地図タイル（国土地理院 淡色地図）に変更
-    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
-        attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>",
-        maxZoom: 18,
-        opacity: 1.0,
+    // シンプルな地図（ラベルなし、建物なし）
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20,
         bounds: bounds
     }).addTo(map);
 
@@ -245,9 +245,9 @@ onMounted(async () => {
         geoJsonLayer = markRaw(L.geoJson(geoData, {
             style: {
                 fillColor: 'transparent',
-                weight: 0.5,
-                color: '#999', // 境界線をグレーに
-                fillOpacity: 0.1 // 少しだけ色をつける
+                weight: 0.3, // 境界線を細く
+                color: '#ccc', // 境界線を薄いグレーに
+                fillOpacity: 0 // 塗りつぶしなし
             },
             onEachFeature: (feature, layer) => {
                 const props = feature.properties;
@@ -340,7 +340,6 @@ onMounted(async () => {
 #map {
     height: 100vh;
     width: 100%;
-    background: #f4f7f6; /* ライトテーマ背景 */
 }
 
 :deep(.eew-rect-animated) {
@@ -373,7 +372,6 @@ onMounted(async () => {
     left: 0;
     width: 100%;
     height: 100%;
-    background: #f4f7f6; /* ライトテーマ背景 */
     display: flex;
     justify-content: center;
     align-items: center;
