@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\WeatherController;
 use App\Http\Controllers\Web\EarthquakeController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -18,5 +19,8 @@ Route::middleware('auth')->group(function () {
 
 Route::get('/', [EarthquakeController::class, 'index'])->name('earthquake.index');
 Route::get('/api/earthquake/history', [EarthquakeController::class, 'getLatestEarthquake']);
+
+// 天気予報用API (POST)
+Route::post('/api/weather/wind', [WeatherController::class, 'getWindData']);
 
 require __DIR__.'/auth.php';
