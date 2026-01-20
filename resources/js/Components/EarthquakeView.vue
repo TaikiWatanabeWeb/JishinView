@@ -26,6 +26,21 @@ const formatScale = (scale) => {
     const s = parseInt(scale);
     if (isNaN(s) || s < 10) return "-";
     if (s >= 70) return "7";
+    if (s >= 60) return "6⁺";
+    if (s >= 55) return "6⁻";
+    if (s >= 50) return "5⁺";
+    if (s >= 45) return "5⁻";
+    if (s >= 40) return "4";
+    if (s >= 30) return "3";
+    if (s >= 20) return "2";
+    if (s >= 10) return "1";
+    return "-";
+};
+
+const formatScaleJP = (scale) => {
+    const s = parseInt(scale);
+    if (isNaN(s) || s < 10) return "-";
+    if (s >= 70) return "7";
     if (s >= 60) return "6強";
     if (s >= 55) return "6弱";
     if (s >= 50) return "5強";
@@ -335,7 +350,7 @@ onMounted(async () => {
 
         <div id="legend">
             <div v-for="s in [70, 60, 55, 50, 45, 40, 30, 20, 10]" :key="s" class="legend-item">
-                <span :style="{ background: getShindoColor(s) }"></span>震度 {{ formatScale(s) }}
+                <span :style="{ background: getShindoColor(s) }"></span>震度 {{ formatScaleJP(s) }}
             </div>
         </div>
     </div>
