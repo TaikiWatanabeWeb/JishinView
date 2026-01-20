@@ -247,7 +247,7 @@ watch(() => props.active, (newVal) => {
 onMounted(async () => {
     const bounds = L.latLngBounds(L.latLng(20, 118), L.latLng(50, 155));
     map = markRaw(L.map('map', {
-        center: [36.5, 137.0], zoom: 5, minZoom: 5, maxBounds: bounds, maxBoundsViscosity: 1.0, zoomControl: false
+        center: [36.5, 137.0], zoom: 5, minZoom: 5, maxBounds: bounds, maxBoundsViscosity: 1.0, zoomControl: false, attributionControl: false
     }));
 
     // シンプルな地図（ラベルなし、建物なし）
