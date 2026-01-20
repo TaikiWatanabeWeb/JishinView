@@ -212,7 +212,8 @@ const updateMapDisplay = (shouldFly = false) => {
                 html: '<div class="ripple"></div><div class="ripple delay"></div><div class="epicenter-mark">×</div>',
                 iconSize: [40, 40],
                 iconAnchor: [20, 20]
-            })
+            }),
+            interactive: false // マウスイベントを無効化
         }).addTo(map);
 
         if (isInitialLoad.value || shouldFly) {
@@ -471,6 +472,7 @@ onMounted(async () => {
 :deep(.epicenter-wrapper) {
     background: transparent;
     border: none;
+    pointer-events: none; /* マウスイベントを無効化 */
 }
 
 :deep(.epicenter-mark) {
@@ -499,6 +501,7 @@ onMounted(async () => {
     opacity: 0;
     box-sizing: border-box;
     animation: ripple-anim 2s infinite ease-out;
+    pointer-events: none; /* マウスイベントを無効化 */
 }
 
 :deep(.ripple.delay) {
