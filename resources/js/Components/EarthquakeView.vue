@@ -192,7 +192,12 @@ const updateMapDisplay = (shouldFly = false) => {
     if (epicenterMarker) map.removeLayer(epicenterMarker);
     if (hypo.latitude && hypo.latitude !== -1) {
         epicenterMarker = L.marker([hypo.latitude, hypo.longitude], {
-            icon: L.divIcon({className: 'epicenter-mark', html: '×', iconSize: [40, 40], iconAnchor: [20, 20]})
+            icon: L.divIcon({
+                className: 'epicenter-wrapper',
+                html: '<div class="ripple"></div><div class="ripple delay"></div><div class="epicenter-mark">×</div>',
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            })
         }).addTo(map);
 
         if (isInitialLoad.value || shouldFly) {
@@ -448,13 +453,56 @@ onMounted(async () => {
     text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
 }
 
+:deep(.epicenter-wrapper) {
+    background: transparent;
+    border: none;
+}
+
 :deep(.epicenter-mark) {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     color: #ff0000 !important;
     font-size: 80px !important;
     text-shadow: 0 0 5px #fff, 0 0 10px #fff;
     line-height: 40px;
     text-align: center;
     font-weight: lighter;
+    z-index: 10;
+}
+
+:deep(.ripple) {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #ff0000;
+    opacity: 0;
+    box-sizing: border-box;
+    animation: ripple-anim 2s infinite ease-out;
+}
+
+:deep(.ripple.delay) {
+    animation-delay: 1s;
+}
+
+@keyframes ripple-anim {
+    0% {
+        width: 20px;
+        height: 20px;
+        opacity: 1;
+        border-width: 3px;
+    }
+    100% {
+        width: 150px;
+        height: 150px;
+        opacity: 0;
+        border-width: 1px;
+    }
 }
 
 :deep(.city-tooltip) {
