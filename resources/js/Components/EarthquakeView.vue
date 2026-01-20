@@ -3,6 +3,9 @@ import {markRaw, nextTick, onMounted, ref, watch} from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import EarthquakePanel from "@/Components/EarthquakePanel.vue";
+import EarthquakeLegend from "@/Components/EarthquakeLegend.vue";
+import LoadingOverlay from "@/Components/LoadingOverlay.vue";
+import {formatScale, getShindoColor} from "@/Utils/earthquakeUtils";
 
 const props = defineProps({
     active: Boolean
@@ -21,50 +24,6 @@ let geoJsonLayer = null;
 let iconLayerGroup = null;
 let epicenterMarker = null;
 let eewBoundsLayer = null;
-
-const formatScale = (scale) => {
-    const s = parseInt(scale);
-    if (isNaN(s) || s < 10) return "-";
-    if (s >= 70) return "7";
-    if (s >= 60) return "6⁺";
-    if (s >= 55) return "6⁻";
-    if (s >= 50) return "5⁺";
-    if (s >= 45) return "5⁻";
-    if (s >= 40) return "4";
-    if (s >= 30) return "3";
-    if (s >= 20) return "2";
-    if (s >= 10) return "1";
-    return "-";
-};
-
-const formatScaleJP = (scale) => {
-    const s = parseInt(scale);
-    if (isNaN(s) || s < 10) return "-";
-    if (s >= 70) return "7";
-    if (s >= 60) return "6強";
-    if (s >= 55) return "6弱";
-    if (s >= 50) return "5強";
-    if (s >= 45) return "5弱";
-    if (s >= 40) return "4";
-    if (s >= 30) return "3";
-    if (s >= 20) return "2";
-    if (s >= 10) return "1";
-    return "-";
-};
-
-const getShindoColor = (scale) => {
-    const s = parseInt(scale);
-    if (s >= 70) return '#c850c8';
-    if (s >= 60) return '#ff6b6b';
-    if (s >= 55) return '#ff8e53';
-    if (s >= 50) return '#ffad5a';
-    if (s >= 45) return '#ffcf77';
-    if (s >= 40) return '#fff27d';
-    if (s >= 30) return '#98ee99';
-    if (s >= 20) return '#81d4fa';
-    if (s >= 10) return '#bbdefb';
-    return 'transparent';
-};
 
 const updateClock = () => {
     const now = new Date();
@@ -328,14 +287,7 @@ onMounted(async () => {
 
 <template>
     <div class="view-container">
-        <Transition name="fade">
-            <div v-if="isLoading" class="loading-overlay">
-                <div class="loading-content">
-                    <div class="spinner"></div>
-                    <p>データを読み込んでいます...</p>
-                </div>
-            </div>
-        </Transition>
+        <LoadingOverlay :isLoading="isLoading"/>
 
         <div id="map"></div>
 
@@ -343,17 +295,11 @@ onMounted(async () => {
             v-if="!isLoading && earthquakes.length > 0"
             :earthquakes="earthquakes"
             v-model:currentIndex="currentIndex"
-            :formatScale="formatScale"
-            :getShindoColor="getShindoColor"
             :lastUpdateDisplay="lastUpdateDisplay"
             :isEEW="currentIsEEW"
         />
 
-        <div id="legend">
-            <div v-for="s in [70, 60, 55, 50, 45, 40, 30, 20, 10]" :key="s" class="legend-item">
-                <span :style="{ background: getShindoColor(s) }"></span>震度 {{ formatScaleJP(s) }}
-            </div>
-        </div>
+        <EarthquakeLegend/>
     </div>
 </template>
 
@@ -385,74 +331,6 @@ onMounted(async () => {
         opacity: 1;
         stroke-width: 7;
     }
-}
-
-.loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
-
-.loading-content {
-    text-align: center;
-    color: #00c3ff;
-}
-
-.spinner {
-    width: 50px;
-    height: 50px;
-    border: 3px solid rgba(0, 195, 255, 0.1);
-    border-top-color: #00c3ff;
-    border-radius: 50%;
-    animation: spin 1s infinite;
-    margin: 0 auto 15px;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-.fade-leave-active {
-    transition: opacity 0.8s ease;
-}
-
-.fade-leave-to {
-    opacity: 0;
-}
-
-#legend {
-    position: absolute;
-    bottom: 30px;
-    right: 20px;
-    background: rgba(255, 255, 255, 0.8); /* ライトテーマ凡例 */
-    padding: 12px;
-    border-radius: 8px;
-    color: #333;
-    z-index: 1000;
-    font-size: 11px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
-
-.legend-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 4px;
-}
-
-.legend-item span {
-    width: 15px;
-    height: 15px;
-    margin-right: 10px;
-    border-radius: 2px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 :deep(.shindo-icon-inner) {

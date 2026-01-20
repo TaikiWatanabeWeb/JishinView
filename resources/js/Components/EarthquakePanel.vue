@@ -1,11 +1,10 @@
 <script setup>
 import {computed} from 'vue';
+import {formatScale, getShindoColor, formatFullTime, formatDepth} from "@/Utils/earthquakeUtils";
 
 const props = defineProps({
     earthquakes: {type: Array, required: true},
     currentIndex: {type: Number, required: true},
-    formatScale: {type: Function, required: true},
-    getShindoColor: {type: Function, required: true},
     lastUpdateDisplay: {type: String, default: ""},
     isEEW: {type: Boolean, default: false}
 });
@@ -14,22 +13,6 @@ const emit = defineEmits(['update:currentIndex']);
 
 // 現在選択されている地震データ
 const currentEq = computed(() => props.earthquakes[props.currentIndex] || null);
-
-// 時刻の整形: 「2026年01月16日 08:23ごろ」
-const formatFullTime = (timeStr) => {
-    if (!timeStr) return "";
-    const [date, time] = timeStr.split(' ');
-    const [y, m, d] = date.split('/');
-    return `${y}年${m}月${d}日 ${time.substring(0, 5)}ごろ`;
-};
-
-// 深さの整形: 0や-1を「ごく浅い」にする
-const formatDepth = (depth) => {
-    if (depth === '0' || depth === 0 || depth === '-1' || !depth || depth === '-') {
-        return 'ごく浅い';
-    }
-    return `${depth}km`;
-};
 
 const selectHistory = (index) => {
     emit('update:currentIndex', index);
@@ -260,18 +243,53 @@ const selectHistory = (index) => {
     white-space: nowrap;
 }
 
-.is-eew-alert {
-    background: rgba(180, 0, 0, 0.95) !important;
-    border: 2px solid #ff0000 !important;
-    animation: alert-flash 1s infinite alternate;
+.system-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.75rem;
 }
 
-@keyframes alert-flash {
-    from {
-        box-shadow: 0 0 10px #ff0000;
+.live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.live-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #ff4444;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #ff4444;
+    animation: pulse 1.5s infinite;
+}
+
+.live-text {
+    font-weight: bold;
+    color: #ff4444;
+    letter-spacing: 1px;
+}
+
+.update-time-text {
+    color: #aaa;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
     }
-    to {
-        box-shadow: 0 0 30px #ff0000;
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
     }
 }
 </style>
