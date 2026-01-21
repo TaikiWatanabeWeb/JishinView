@@ -6,12 +6,15 @@ import EarthquakePanel from "@/Components/EarthquakePanel.vue";
 import EarthquakeLegend from "@/Components/EarthquakeLegend.vue";
 import LoadingOverlay from "@/Components/LoadingOverlay.vue";
 import {formatScale, getShindoColor} from "@/Utils/earthquakeUtils";
+import axios from 'axios';
 
 const props = defineProps({
     active: Boolean
 });
 
 const earthquakes = ref([]);
+const savedEarthquakes = ref([]);
+const isShowingSaved = ref(false);
 const currentIndex = ref(0);
 const lastTopId = ref(null);
 const isInitialLoad = ref(true);
@@ -47,7 +50,10 @@ const fetchHistory = async () => {
             const latestId = filtered[0].id;
             if (latestId !== lastTopId.value) {
                 const isNewArrival = lastTopId.value !== null;
-                if (isNewArrival) currentIndex.value = 0;
+                if (isNewArrival) {
+                    currentIndex.value = 0;
+                    isShowingSaved.value = false;
+                }
                 earthquakes.value = filtered;
                 lastTopId.value = latestId;
                 nextTick(() => updateMapDisplay(isNewArrival));
@@ -57,6 +63,50 @@ const fetchHistory = async () => {
         console.error(e);
     }
 };
+
+const fetchSavedEarthquakes = async () => {
+    try {
+        const response = await axios.get('/api/earthquake/saved');
+        savedEarthquakes.value = response.data.map(item => item.data);
+        if (savedEarthquakes.value.length > 0) {
+            isShowingSaved.value = true;
+            currentIndex.value = 0;
+            nextTick(() => updateMapDisplay(true));
+        } else {
+            alert('保存された地震情報はありません。');
+        }
+    } catch (error) {
+        console.error('Failed to fetch saved earthquakes:', error);
+    }
+};
+
+const saveEarthquake = async (index) => {
+    const dataToSave = earthquakes.value[index];
+    try {
+        await axios.post('/api/earthquake/save', { data: dataToSave });
+        alert('地震情報を保存しました。');
+    } catch (error) {
+        if (error.response && error.response.status === 500) {
+            alert('この地震情報は既に保存されています。');
+        } else {
+            alert('保存に失敗しました。');
+        }
+        console.error('Failed to save earthquake:', error);
+    }
+};
+
+const deleteEarthquake = async (id) => {
+    if (!confirm('この地震情報を削除しますか？')) return;
+    try {
+        await axios.delete(`/api/earthquake/saved/${id}`);
+        alert('削除しました。');
+        await fetchSavedEarthquakes();
+    } catch (error) {
+        alert('削除に失敗しました。');
+        console.error('Failed to delete earthquake:', error);
+    }
+};
+
 
 const handleEEW = (data) => {
     if (!map) return;
@@ -104,8 +154,9 @@ const connectWS = () => {
 };
 
 const updateMapDisplay = (shouldFly = false) => {
-    if (!map || !geoJsonLayer || earthquakes.value.length === 0) return;
-    const target = earthquakes.value[currentIndex.value];
+    const displayData = isShowingSaved.value ? savedEarthquakes.value : earthquakes.value;
+    if (!map || !geoJsonLayer || displayData.length === 0) return;
+    const target = displayData[currentIndex.value];
     if (!target) return;
 
     const points = target.points || [];
@@ -144,8 +195,8 @@ const updateMapDisplay = (shouldFly = false) => {
         layer.setStyle({
             fillColor: scale > 0 ? getShindoColor(scale) : 'transparent',
             fillOpacity: scale > 0 ? 0.6 : 0,
-            color: scale > 0 ? '#ffffff' : '#777575', // 境界線を薄いグレーに
-            weight: scale > 0 ? 1.5 : 0.3 // 通常時の線を細く
+            color: scale > 0 ? '#ffffff' : '#777575',
+            weight: scale > 0 ? 1.5 : 0.3
         });
 
         if (scale > 0 && !placedCities.has(fullName)) {
@@ -172,20 +223,16 @@ const updateMapDisplay = (shouldFly = false) => {
                 iconSize: [40, 40],
                 iconAnchor: [20, 20]
             }),
-            interactive: false // マウスイベントを無効化
+            interactive: false
         }).addTo(map);
 
         if (isInitialLoad.value || shouldFly) {
             let dynamicZoom = 8;
             const maxS = parseInt(eqInfo.maxScale);
 
-            if (maxS >= 50) {
-                dynamicZoom = 7;
-            } else if (maxS >= 40) {
-                dynamicZoom = 8;
-            } else if (maxS < 30) {
-                dynamicZoom = 10;
-            }
+            if (maxS >= 50) dynamicZoom = 7;
+            else if (maxS >= 40) dynamicZoom = 8;
+            else if (maxS < 30) dynamicZoom = 10;
 
             map.flyTo([hypo.latitude, hypo.longitude], dynamicZoom, {animate: true, duration: 1.5});
             isInitialLoad.value = false;
@@ -197,11 +244,15 @@ watch(currentIndex, () => updateMapDisplay(true));
 
 watch(() => props.active, (newVal) => {
     if (newVal && map) {
-        nextTick(() => {
-            map.invalidateSize();
-        });
+        nextTick(() => map.invalidateSize());
     }
 });
+
+const showLatest = () => {
+    isShowingSaved.value = false;
+    currentIndex.value = 0;
+    nextTick(() => updateMapDisplay(true));
+};
 
 onMounted(async () => {
     const bounds = L.latLngBounds(L.latLng(20, 118), L.latLng(50, 155));
@@ -209,7 +260,6 @@ onMounted(async () => {
         center: [36.5, 137.0], zoom: 5, minZoom: 5, maxBounds: bounds, maxBoundsViscosity: 1.0, zoomControl: false, attributionControl: false
     }));
 
-    // シンプルな地図（ラベルなし、建物なし）
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
@@ -225,9 +275,9 @@ onMounted(async () => {
         geoJsonLayer = markRaw(L.geoJson(geoData, {
             style: {
                 fillColor: 'transparent',
-                weight: 0.3, // 境界線を細く
-                color: '#ccc', // 境界線を薄いグレーに
-                fillOpacity: 0 // 塗りつぶしなし
+                weight: 0.3,
+                color: '#ccc',
+                fillOpacity: 0
             },
             onEachFeature: (feature, layer) => {
                 const props = feature.properties;
@@ -292,11 +342,17 @@ onMounted(async () => {
         <div id="map"></div>
 
         <EarthquakePanel
-            v-if="!isLoading && earthquakes.length > 0"
+            v-if="!isLoading && (earthquakes.length > 0 || savedEarthquakes.length > 0)"
             :earthquakes="earthquakes"
+            :saved-earthquakes="savedEarthquakes"
+            :is-showing-saved="isShowingSaved"
             v-model:currentIndex="currentIndex"
             :lastUpdateDisplay="lastUpdateDisplay"
             :isEEW="currentIsEEW"
+            @save="saveEarthquake"
+            @delete="deleteEarthquake"
+            @show-saved="fetchSavedEarthquakes"
+            @show-latest="showLatest"
         />
 
         <EarthquakeLegend/>
@@ -350,7 +406,7 @@ onMounted(async () => {
 :deep(.epicenter-wrapper) {
     background: transparent;
     border: none;
-    pointer-events: none; /* マウスイベントを無効化 */
+    pointer-events: none;
 }
 
 :deep(.epicenter-mark) {
@@ -379,7 +435,7 @@ onMounted(async () => {
     opacity: 0;
     box-sizing: border-box;
     animation: ripple-anim 2s infinite ease-out;
-    pointer-events: none; /* マウスイベントを無効化 */
+    pointer-events: none;
 }
 
 :deep(.ripple.delay) {

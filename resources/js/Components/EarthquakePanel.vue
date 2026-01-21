@@ -4,25 +4,43 @@ import {formatScale, getShindoColor, formatFullTime, formatDepth} from "@/Utils/
 
 const props = defineProps({
     earthquakes: {type: Array, required: true},
+    savedEarthquakes: {type: Array, default: () => []},
+    isShowingSaved: {type: Boolean, default: false},
     currentIndex: {type: Number, required: true},
     lastUpdateDisplay: {type: String, default: ""},
     isEEW: {type: Boolean, default: false}
 });
 
-const emit = defineEmits(['update:currentIndex']);
+const emit = defineEmits(['update:currentIndex', 'save', 'delete', 'show-saved', 'show-latest']);
 
-// 現在選択されている地震データ
-const currentEq = computed(() => props.earthquakes[props.currentIndex] || null);
+const displayList = computed(() => props.isShowingSaved ? props.savedEarthquakes : props.earthquakes);
+const currentEq = computed(() => displayList.value[props.currentIndex] || null);
 
 const selectHistory = (index) => {
     emit('update:currentIndex', index);
+};
+
+const handleSave = (index, event) => {
+    event.stopPropagation();
+    emit('save', index);
+};
+
+const handleDelete = (id, event) => {
+    event.stopPropagation();
+    emit('delete', id);
 };
 </script>
 
 <template>
     <div v-if="currentEq" class="panel-container">
         <div id="side-panel">
-            <div class="panel-header">各地の震度情報</div>
+            <div class="panel-header">
+                <span>各地の震度情報</span>
+                <div class="header-buttons">
+                    <button @click="emit('show-latest')" :class="{active: !isShowingSaved}">最新</button>
+                    <button @click="emit('show-saved')" :class="{active: isShowingSaved}">保存済</button>
+                </div>
+            </div>
 
             <div class="panel-body">
                 <div class="shindo-main-card">
@@ -54,18 +72,20 @@ const selectHistory = (index) => {
                 </div>
 
                 <div id="history-list">
-                    <div class="history-label">地震履歴</div>
-                    <div v-for="(eq, i) in earthquakes.slice(0, 15)"
+                    <div class="history-label">{{ isShowingSaved ? '保存済み地震' : '地震履歴' }}</div>
+                    <div v-for="(eq, i) in displayList.slice(0, 15)"
                          :key="eq.id"
                          class="history-item"
                          :class="{ 'active-eq': currentIndex === i }"
                          @click="selectHistory(i)">
-                    <span class="h-scale" :style="{ background: getShindoColor(eq.earthquake.maxScale) }">
-                        {{ formatScale(eq.earthquake.maxScale) }}
-                    </span>
+                        <span class="h-scale" :style="{ background: getShindoColor(eq.earthquake.maxScale) }">
+                            {{ formatScale(eq.earthquake.maxScale) }}
+                        </span>
                         <span class="h-time">{{ eq.earthquake.time.split(' ')[1].substring(0, 5) }}</span>
                         <span class="h-name">{{ eq.earthquake.hypocenter.name }}</span>
                         <span class="h-m">M{{ eq.earthquake.hypocenter.magnitude }}</span>
+                        <button v-if="!isShowingSaved" class="action-button save" @click="handleSave(i, $event)">保存</button>
+                        <button v-else class="action-button delete" @click="handleDelete(eq.id, $event)">削除</button>
                     </div>
                 </div>
             </div>
@@ -98,11 +118,31 @@ const selectHistory = (index) => {
 }
 
 .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     background: #2c3e50;
     padding: 10px 15px;
     font-weight: bold;
     font-size: 0.85rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-buttons button {
+    background: transparent;
+    border: 1px solid #5f7387;
+    color: #ccc;
+    padding: 4px 8px;
+    margin-left: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+}
+
+.header-buttons button.active {
+    background: #00c3ff;
+    border-color: #00c3ff;
+    color: white;
 }
 
 .panel-body {
@@ -241,6 +281,19 @@ const selectHistory = (index) => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.action-button {
+    background: #4a5568;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.action-button.delete {
+    background: #c53030;
 }
 
 .system-status {
