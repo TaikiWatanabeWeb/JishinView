@@ -1,6 +1,7 @@
 <script setup>
 import {computed} from 'vue';
-import {formatScale, getShindoColor, formatFullTime, formatDepth} from "@/Utils/earthquakeUtils";
+import {formatDepth, formatFullTime, formatScale, getShindoColor} from "@/Utils/earthquakeUtils";
+import AnimatedText from "@/Components/AnimatedText.vue";
 
 const props = defineProps({
     earthquakes: {type: Array, required: true},
@@ -29,6 +30,50 @@ const handleDelete = (id, event) => {
     event.stopPropagation();
     emit('delete', id);
 };
+
+// Transition Hooks for smooth height animation
+const onBeforeLeave = (el) => {
+    el.style.height = el.scrollHeight + 'px';
+    el.style.overflow = 'hidden';
+};
+
+const onLeave = (el, done) => {
+    el.style.transition = 'height 0.3s ease, opacity 0.3s ease, transform 0.3s ease';
+    // Force reflow
+    el.offsetHeight;
+    el.style.height = '0';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(10px)';
+    setTimeout(done, 300);
+};
+
+const onBeforeEnter = (el) => {
+    el.style.height = '0';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(-30px)';
+    el.style.overflow = 'hidden';
+};
+
+const onEnter = (el, done) => {
+    // Measure height
+    el.style.height = 'auto';
+    const height = el.scrollHeight;
+    el.style.height = '0';
+
+    // Force reflow
+    el.offsetHeight;
+
+    el.style.transition = 'height 0.4s ease-out, opacity 0.4s ease-out, transform 0.4s ease-out';
+    el.style.height = height + 'px';
+    el.style.opacity = '1';
+    el.style.transform = 'translateX(0)';
+
+    setTimeout(() => {
+        el.style.height = 'auto';
+        el.style.overflow = 'visible';
+        done();
+    }, 400);
+};
 </script>
 
 <template>
@@ -42,53 +87,78 @@ const handleDelete = (id, event) => {
                 </div>
             </div>
 
-            <div class="panel-body">
-                <div class="shindo-main-card">
-                    <div class="shindo-large-badge"
-                         :style="{ background: getShindoColor(currentEq.earthquake.maxScale) }">
-                        <div class="shindo-label">最大震度</div>
-                        <div class="shindo-number">{{ formatScale(currentEq.earthquake.maxScale) }}</div>
-                    </div>
+            <Transition
+                mode="out-in"
+                @before-leave="onBeforeLeave"
+                @leave="onLeave"
+                @before-enter="onBeforeEnter"
+                @enter="onEnter"
+            >
+                <div class="panel-body" :key="isShowingSaved ? 'saved' : 'latest'">
 
-                    <div class="area-info">
-                        <div class="info-time-top">{{ formatFullTime(currentEq.earthquake.time) }}</div>
-                        <div class="area-name">{{ currentEq.earthquake.hypocenter.name || "調査中" }}</div>
+                    <div class="shindo-main-card">
+                        <div class="badge-wrapper">
+                            <Transition name="badge-fade">
+                                <div class="shindo-large-badge"
+                                     :key="currentEq.id"
+                                     :style="{ background: getShindoColor(currentEq.earthquake.maxScale) }">
+                                    <div class="shindo-label">最大震度</div>
+                                    <div class="shindo-number">{{ formatScale(currentEq.earthquake.maxScale) }}</div>
+                                </div>
+                            </Transition>
+                        </div>
 
-                        <div class="eq-spec-row">
-                            <div class="spec-item">
-                                <span class="spec-label">マグニチュード</span>
-                                <span class="spec-value m-value">{{
-                                        currentEq.earthquake.hypocenter.magnitude || '-'
-                                    }}</span>
+                        <div class="area-info">
+                            <div class="info-time-top">
+                                <AnimatedText :text="formatFullTime(currentEq.earthquake.time)" :key="currentEq.id"
+                                              :delay="50"/>
                             </div>
-                            <div class="spec-item">
-                                <span class="spec-label">深さ</span>
-                                <span class="spec-value d-value">{{
-                                        formatDepth(currentEq.earthquake.hypocenter.depth)
-                                    }}</span>
+                            <div class="area-name">
+                                <AnimatedText :text="currentEq.earthquake.hypocenter.name || '調査中'"
+                                              :key="currentEq.id" :delay="100"/>
+                            </div>
+
+                            <div class="eq-spec-row">
+                                <div class="spec-item">
+                                    <span class="spec-label">マグニチュード</span>
+                                    <span class="spec-value m-value">
+                                        <AnimatedText :text="currentEq.earthquake.hypocenter.magnitude || '-'"
+                                                      :key="currentEq.id" :delay="200"/>
+                                    </span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label">深さ</span>
+                                    <span class="spec-value d-value">
+                                        <AnimatedText :text="formatDepth(currentEq.earthquake.hypocenter.depth)"
+                                                      :key="currentEq.id" :delay="250"/>
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div id="history-list">
-                    <div class="history-label">{{ isShowingSaved ? '保存済み地震' : '地震履歴' }}</div>
-                    <div v-for="(eq, i) in displayList.slice(0, 15)"
-                         :key="eq.id"
-                         class="history-item"
-                         :class="{ 'active-eq': currentIndex === i }"
-                         @click="selectHistory(i)">
-                        <span class="h-scale" :style="{ background: getShindoColor(eq.earthquake.maxScale) }">
-                            {{ formatScale(eq.earthquake.maxScale) }}
-                        </span>
-                        <span class="h-time">{{ eq.earthquake.time.split(' ')[1].substring(0, 5) }}</span>
-                        <span class="h-name">{{ eq.earthquake.hypocenter.name }}</span>
-                        <span class="h-m">M{{ eq.earthquake.hypocenter.magnitude }}</span>
-                        <button v-if="!isShowingSaved" class="action-button save" @click="handleSave(i, $event)">保存</button>
-                        <button v-else class="action-button delete" @click="handleDelete(eq.id, $event)">削除</button>
+                    <div id="history-list">
+                        <div class="history-label">{{ isShowingSaved ? '保存済み地震' : '地震履歴' }}</div>
+                        <div v-for="(eq, i) in displayList.slice(0, 15)"
+                             :key="eq.id"
+                             class="history-item"
+                             :class="{ 'active-eq': currentIndex === i }"
+                             @click="selectHistory(i)">
+                            <span class="h-scale" :style="{ background: getShindoColor(eq.earthquake.maxScale) }">
+                                {{ formatScale(eq.earthquake.maxScale) }}
+                            </span>
+                            <span class="h-time">{{ eq.earthquake.time.split(' ')[1].substring(0, 5) }}</span>
+                            <span class="h-name">{{ eq.earthquake.hypocenter.name }}</span>
+                            <span class="h-m">M{{ eq.earthquake.hypocenter.magnitude }}</span>
+                            <button v-if="!isShowingSaved" class="action-button save" @click="handleSave(i, $event)">
+                                保存
+                            </button>
+                            <button v-else class="action-button delete" @click="handleDelete(eq.id, $event)">削除
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </Transition>
 
             <div class="system-status">
                 <div class="live-indicator">
@@ -155,8 +225,18 @@ const handleDelete = (id, event) => {
     margin-bottom: 20px;
 }
 
-.shindo-large-badge {
+.badge-wrapper {
+    position: relative;
     width: 80px;
+    flex-shrink: 0;
+}
+
+.shindo-large-badge {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -165,6 +245,16 @@ const handleDelete = (id, event) => {
     color: #fff;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.badge-fade-enter-active,
+.badge-fade-leave-active {
+    transition: opacity 0.5s ease;
+}
+
+.badge-fade-enter-from,
+.badge-fade-leave-to {
+    opacity: 0;
 }
 
 .shindo-label {
@@ -185,6 +275,7 @@ const handleDelete = (id, event) => {
     font-size: 1rem;
     color: #aaa;
     margin-bottom: 2px;
+    min-height: 1.5em;
 }
 
 .area-name {
@@ -192,6 +283,7 @@ const handleDelete = (id, event) => {
     font-weight: bold;
     margin-bottom: 10px;
     line-height: 1.2;
+    min-height: 1.2em;
 }
 
 .eq-spec-row {
@@ -249,11 +341,50 @@ const handleDelete = (id, event) => {
     cursor: pointer;
     gap: 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    transition: padding-left 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Background Animation */
+.history-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    z-index: -1;
+}
+
+.history-item.active-eq::before {
+    transform: translateX(0);
+}
+
+/* Border Animation */
+.history-item::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: #00c3ff;
+    transform: scaleY(0);
+    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    z-index: -1;
+}
+
+.history-item.active-eq::after {
+    transform: scaleY(1);
 }
 
 .active-eq {
-    background: rgba(255, 255, 255, 0.15);
-    border-left: 4px solid #00c3ff;
+    padding-left: 12px !important;
 }
 
 .h-scale {

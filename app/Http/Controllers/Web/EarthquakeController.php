@@ -31,12 +31,15 @@ class EarthquakeController extends Controller
     {
         $data = $request->input('data');
 
-        $savedEarthquake = SavedEarthquake::create([
-            'earthquake_id' => $data['id'],
-            'data' => $data,
-        ]);
+        $savedEarthquake = SavedEarthquake::firstOrCreate(
+            ['earthquake_id' => $data['id']],
+            ['data' => $data]
+        );
 
-        return response()->json($savedEarthquake);
+        return response()->json([
+            'data' => $savedEarthquake,
+            'created' => $savedEarthquake->wasRecentlyCreated
+        ]);
     }
 
     public function getSavedEarthquakes()

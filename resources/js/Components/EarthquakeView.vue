@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import EarthquakePanel from "@/Components/EarthquakePanel.vue";
 import EarthquakeLegend from "@/Components/EarthquakeLegend.vue";
 import LoadingOverlay from "@/Components/LoadingOverlay.vue";
+import CustomDialog from "@/Components/CustomDialog.vue";
 import {formatScale, getShindoColor} from "@/Utils/earthquakeUtils";
 import axios from 'axios';
 
@@ -22,6 +23,13 @@ const lastUpdateDisplay = ref("");
 const isLoading = ref(true);
 const currentIsEEW = ref(false);
 
+// Dialog state
+const dialogShow = ref(false);
+const dialogTitle = ref("");
+const dialogMessage = ref("");
+const dialogIsConfirm = ref(false);
+const dialogConfirmAction = ref(null);
+
 let map = null;
 let geoJsonLayer = null;
 let iconLayerGroup = null;
@@ -34,6 +42,34 @@ const updateClock = () => {
     const m = String(now.getMinutes()).padStart(2, '0');
     const s = String(now.getSeconds()).padStart(2, '0');
     lastUpdateDisplay.value = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${h}時${m}分${s}秒更新`;
+};
+
+const showDialog = (title, message, isConfirm = false, onConfirm = null) => {
+    dialogTitle.value = title;
+    dialogMessage.value = message;
+    dialogIsConfirm.value = isConfirm;
+    dialogConfirmAction.value = onConfirm;
+    dialogShow.value = true;
+};
+
+const closeDialog = () => {
+    dialogShow.value = false;
+    dialogConfirmAction.value = null;
+};
+
+const handleDialogConfirm = () => {
+    if (dialogConfirmAction.value) {
+        dialogConfirmAction.value();
+    }
+    if (!dialogIsConfirm.value) {
+        closeDialog();
+    } else {
+        // For confirm dialogs, the action might be async, but here we just close it after triggering action
+        // If we wanted to wait, we'd need to make handleDialogConfirm async.
+        // But usually confirm action triggers something else.
+        // Let's just close it.
+        closeDialog();
+    }
 };
 
 const fetchHistory = async () => {
@@ -64,6 +100,12 @@ const fetchHistory = async () => {
     }
 };
 
+const showLatest = () => {
+    isShowingSaved.value = false;
+    currentIndex.value = 0;
+    nextTick(() => updateMapDisplay(true));
+};
+
 const fetchSavedEarthquakes = async () => {
     try {
         const response = await axios.get('/api/earthquake/saved');
@@ -73,7 +115,10 @@ const fetchSavedEarthquakes = async () => {
             currentIndex.value = 0;
             nextTick(() => updateMapDisplay(true));
         } else {
-            alert('保存された地震情報はありません。');
+            showDialog('通知', '保存された地震情報はありません。');
+            if (isShowingSaved.value) {
+                showLatest();
+            }
         }
     } catch (error) {
         console.error('Failed to fetch saved earthquakes:', error);
@@ -84,27 +129,42 @@ const saveEarthquake = async (index) => {
     const dataToSave = earthquakes.value[index];
     try {
         await axios.post('/api/earthquake/save', { data: dataToSave });
-        alert('地震情報を保存しました。');
+        showDialog('成功', '地震情報を保存しました。');
     } catch (error) {
         if (error.response && error.response.status === 500) {
-            alert('この地震情報は既に保存されています。');
+            showDialog('エラー', 'この地震情報は既に保存されています。');
         } else {
-            alert('保存に失敗しました。');
+            showDialog('エラー', '保存に失敗しました。');
         }
         console.error('Failed to save earthquake:', error);
     }
 };
 
-const deleteEarthquake = async (id) => {
-    if (!confirm('この地震情報を削除しますか？')) return;
-    try {
-        await axios.delete(`/api/earthquake/saved/${id}`);
-        alert('削除しました。');
-        await fetchSavedEarthquakes();
-    } catch (error) {
-        alert('削除に失敗しました。');
-        console.error('Failed to delete earthquake:', error);
-    }
+const deleteEarthquake = (id) => {
+    showDialog('確認', 'この地震情報を削除しますか？', true, async () => {
+        try {
+            await axios.delete(`/api/earthquake/saved/${id}`);
+
+            // Re-fetch saved earthquakes silently to update the list
+            const response = await axios.get('/api/earthquake/saved');
+            savedEarthquakes.value = response.data.map(item => item.data);
+
+            showDialog('成功', '削除しました。');
+
+            if (savedEarthquakes.value.length > 0) {
+                if (currentIndex.value >= savedEarthquakes.value.length) {
+                    currentIndex.value = savedEarthquakes.value.length - 1;
+                }
+                nextTick(() => updateMapDisplay(true));
+            } else {
+                // If no saved earthquakes left, switch to latest
+                showLatest();
+            }
+        } catch (error) {
+            showDialog('エラー', '削除に失敗しました。');
+            console.error('Failed to delete earthquake:', error);
+        }
+    });
 };
 
 
@@ -248,12 +308,6 @@ watch(() => props.active, (newVal) => {
     }
 });
 
-const showLatest = () => {
-    isShowingSaved.value = false;
-    currentIndex.value = 0;
-    nextTick(() => updateMapDisplay(true));
-};
-
 onMounted(async () => {
     const bounds = L.latLngBounds(L.latLng(20, 118), L.latLng(50, 155));
     map = markRaw(L.map('map', {
@@ -338,6 +392,15 @@ onMounted(async () => {
 <template>
     <div class="view-container">
         <LoadingOverlay :isLoading="isLoading"/>
+
+        <CustomDialog
+            :show="dialogShow"
+            :title="dialogTitle"
+            :message="dialogMessage"
+            :is-confirm="dialogIsConfirm"
+            @close="closeDialog"
+            @confirm="handleDialogConfirm"
+        />
 
         <div id="map"></div>
 
